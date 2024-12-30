@@ -1,84 +1,78 @@
-# remember to go to repo settings/actions and allow github actions to write and to open pull request
-name: Version Bump and PR
+name: "PackBumpPR"
+description: "Automatically bump package versions and create pull requests."
+author: "HichemTab-tech"
+branding:
+  icon: "package"
+  color: "#00cc99"
 
-on:
-  workflow_dispatch:
-    inputs:
-      version_increment:
-        description: "Version increment type (patch, minor, major, or custom)"
-        required: true
-        default: "patch"
-      custom_version:
-        description: "Custom version (only if version_increment is custom)"
-        required: false
+inputs:
+  version_increment:
+    description: "Version increment type (patch, minor, major, or custom)"
+    required: true
+    default: "patch"
+  custom_version:
+    description: "Custom version (only if version_increment is custom)"
+    required: false
 
-jobs:
-  version-bump:
-    runs-on: ubuntu-latest
+outputs:
+  pr_url:
+    description: "URL of the created pull request"
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '22.x'
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22.x'
 
+    - name: Initialize Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: init git and checkout
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+    - name: Increment or Set Version
+      run: |
+        CURRENT_VERSION=$(jq -r '.version' package.json)
+        if [[ "${{ inputs.version_increment }}" == "custom" && -n "${{ inputs.custom_version }}" ]]; then
+          NEW_VERSION="${{ inputs.custom_version }}"
+        else
+          NEW_VERSION=$(npx semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+        fi
+        echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
 
-      - name: Increment or set version
-        id: bump-version
-        run: |
-          # Read the current version from package.json
-          CURRENT_VERSION=$(jq -r '.version' package.json)
+        git checkout -b version-bump-$NEW_VERSION
 
-          # Determine the new version
-          if [[ "${{ github.event.inputs.version_increment }}" == "custom" && -n "${{ github.event.inputs.custom_version }}" ]]; then
-            NEW_VERSION="${{ github.event.inputs.custom_version }}"
-          else
-            NEW_VERSION=$(npx semver $CURRENT_VERSION -i ${{ github.event.inputs.version_increment }})
-          fi
+        jq ".version=\"$NEW_VERSION\"" package.json > temp.json && mv temp.json package.json
+        jq ".version=\"$NEW_VERSION\"" package-lock.json > temp-lock.json && mv temp-lock.json package-lock.json
 
-          # Output the new version
-          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+    - name: Commit Changes
+      run: |
+        git add package.json package-lock.json
+        git commit -m "Bump version to ${{ env.new_version }}"
 
-          # create/checkout the branch
-          git checkout -b version-bump-$NEW_VERSION
+    - name: Push Changes
+      run: |
+        git push -u origin version-bump-${{ env.new_version }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          # Update package.json and package-lock.json with the new version
-          jq ".version=\"$NEW_VERSION\"" package.json > temp.json && mv temp.json package.json
-          jq ".version=\"$NEW_VERSION\"" package-lock.json > temp-lock.json && mv temp-lock.json package-lock.json
-
-      - name: Commit changes
-        run: |
-          git add package.json package-lock.json
-          git commit -m "Bump version to ${{ env.new_version }}"
-
-      - name: Push changes
-        run: |
-          git push -u origin version-bump-${{ env.new_version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Pull Request
-        run: |
-          echo "Creating a Pull Request for branch: version-bump-${{ env.new_version }}"
-          PR_RESPONSE=$(curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/pulls \
-            -d @- <<EOF
-          {
-            "title": "Bump version to ${{ env.new_version }}",
-            "body": "This PR updates the version to ${{ env.new_version }} in \`package.json\` and \`package-lock.json\`.",
-            "head": "version-bump-${{ env.new_version }}",
-            "base": "master"
-          }
-          EOF
-          )
-          echo "Pull Request Response: $PR_RESPONSE"
+    - name: Create Pull Request
+      run: |
+        PR_RESPONSE=$(curl -X POST \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github+json" \
+          https://api.github.com/repos/${{ github.repository }}/pulls \
+          -d @- <<EOF
+        {
+          "title": "Bump version to ${{ env.new_version }}",
+          "body": "This PR updates the version to ${{ env.new_version }} in \`package.json\` and \`package-lock.json\`.",
+          "head": "version-bump-${{ env.new_version }}",
+          "base": "master"
+        }
+        EOF
+        )
+        echo "pr_url=$(echo $PR_RESPONSE | jq -r '.html_url')" >> $GITHUB_OUTPUT
