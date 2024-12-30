@@ -3,7 +3,7 @@ description: "Automatically bump package versions and create pull requests."
 author: "HichemTab-tech"
 branding:
   icon: "package"
-  color: "#00cc99"
+  color: "green"
 
 inputs:
   version_increment:
