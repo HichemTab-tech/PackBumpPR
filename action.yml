@@ -13,6 +13,9 @@ inputs:
   custom_version:
     description: "Custom version (only if version_increment is custom)"
     required: false
+  github_token:
+    description: "GitHub token for authentication"
+    required: true
 
 outputs:
   pr_url:
@@ -33,6 +36,7 @@ runs:
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+      shell: bash
 
     - name: Increment or Set Version
       run: |
@@ -48,22 +52,25 @@ runs:
 
         jq ".version=\"$NEW_VERSION\"" package.json > temp.json && mv temp.json package.json
         jq ".version=\"$NEW_VERSION\"" package-lock.json > temp-lock.json && mv temp-lock.json package-lock.json
+      shell: bash
 
     - name: Commit Changes
       run: |
         git add package.json package-lock.json
         git commit -m "Bump version to ${{ env.new_version }}"
+      shell: bash
 
     - name: Push Changes
       run: |
         git push -u origin version-bump-${{ env.new_version }}
+      shell: bash
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
 
     - name: Create Pull Request
       run: |
         PR_RESPONSE=$(curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Authorization: Bearer ${{ inputs.github_token }}" \
           -H "Accept: application/vnd.github+json" \
           https://api.github.com/repos/${{ github.repository }}/pulls \
           -d @- <<EOF
@@ -76,3 +83,4 @@ runs:
         EOF
         )
         echo "pr_url=$(echo $PR_RESPONSE | jq -r '.html_url')" >> $GITHUB_OUTPUT
+      shell: bash
