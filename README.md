@@ -40,12 +40,17 @@ jobs:
         with:
           version_increment: ${{ github.event.inputs.version_increment }}
           custom_version: ${{ github.event.inputs.custom_version }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          main_branche: "main" # or "master"
 ```
 
 ### Inputs 🛠️
 
 - **`version_increment`**: The type of version bump (`patch`, `minor`, `major`, or `custom`).
 - **`custom_version`**: Specify the custom version (only needed if `version_increment` is `custom`).
+- **`github_token`**: The GitHub token for authentication. This is required for pushing changes and creating pull requests.
+- **`main_branche`**: The name of your main branch (e.g., `main` or `master`). This is required to correctly target the base branch for the pull request.
+
 
 ### Outputs 📤
 
