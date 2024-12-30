@@ -16,6 +16,9 @@ inputs:
   github_token:
     description: "GitHub token for authentication"
     required: true
+  main_branche:
+    description: "Main branche name (for example: main)"
+    required: true
 
 outputs:
   pr_url:
@@ -78,7 +81,7 @@ runs:
           "title": "Bump version to ${{ env.new_version }}",
           "body": "This PR updates the version to ${{ env.new_version }} in \`package.json\` and \`package-lock.json\`.",
           "head": "version-bump-${{ env.new_version }}",
-          "base": "master"
+          "base": "${{ inputs.main_branche }}"
         }
         EOF
         )
