@@ -90,10 +90,10 @@ runs:
           # Use semver with the appropriate package manager
           case $PACKAGE_MANAGER in
             "pnpm")
-              NEW_VERSION=$(pnpm exec semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+              NEW_VERSION=$(pnpm dlx semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
               ;;
             "yarn")
-              NEW_VERSION=$(yarn exec semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+              NEW_VERSION=$(yarn dlx semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
               ;;
             "npm"|*)
               NEW_VERSION=$(npx semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
