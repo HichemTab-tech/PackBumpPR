@@ -5,6 +5,7 @@ on:
     paths:
       - 'tests/test_multi_package_manager.sh'
       - 'tests/test_package_managers.sh'
+      - 'tests/test_package_manager_install.sh'
       - 'action.yml'
       - '.github/workflows/**'
 
@@ -19,8 +20,10 @@ jobs:
         run: |
           chmod +x tests/test_multi_package_manager.sh
           chmod +x tests/test_package_managers.sh
+          chmod +x tests/test_package_manager_install.sh
 
       - name: Run shell tests
         run: |
-          ./tests/test_multi_package_manager.sh 
+          ./tests/test_multi_package_manager.sh
           ./tests/test_package_managers.sh
+          ./tests/test_package_manager_install.sh
