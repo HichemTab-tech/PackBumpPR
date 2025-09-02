@@ -36,6 +36,25 @@ runs:
       with:
         node-version: '22.x'
 
+    - name: Install Package Managers
+      run: |
+        # Install pnpm if pnpm-lock.yaml exists
+        if [ -f "pnpm-lock.yaml" ]; then
+          echo "Installing pnpm..."
+          npm install -g pnpm
+          echo "pnpm version: $(pnpm --version)"
+        fi
+        
+        # Install yarn if yarn.lock exists
+        if [ -f "yarn.lock" ]; then
+          echo "Installing yarn..."
+          npm install -g yarn
+          echo "yarn version: $(yarn --version)"
+        fi
+        
+        echo "npm version: $(npm --version)"
+      shell: bash
+
     - name: Initialize Git
       run: |
         git config user.name "github-actions[bot]"
