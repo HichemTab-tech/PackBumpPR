@@ -23,6 +23,7 @@ inputs:
 outputs:
   pr_url:
     description: "URL of the created pull request"
+    value: ${{ steps.create-pull-request.outputs.pr_url }}
 
 runs:
   using: "composite"
@@ -43,24 +44,77 @@ runs:
 
     - name: Increment or Set Version
       run: |
+        # Detect package manager based on lock files
+        if [ -f "pnpm-lock.yaml" ]; then
+          PACKAGE_MANAGER="pnpm"
+          LOCK_FILE="pnpm-lock.yaml"
+        elif [ -f "yarn.lock" ]; then
+          PACKAGE_MANAGER="yarn"
+          LOCK_FILE="yarn.lock"
+        elif [ -f "package-lock.json" ]; then
+          PACKAGE_MANAGER="npm"
+          LOCK_FILE="package-lock.json"
+        else
+          PACKAGE_MANAGER="npm"
+          LOCK_FILE="package-lock.json"
+          echo "No lock file detected, defaulting to npm"
+        fi
+        
+        echo "Detected package manager: $PACKAGE_MANAGER"
+        echo "package_manager=$PACKAGE_MANAGER" >> $GITHUB_ENV
+        echo "lock_file=$LOCK_FILE" >> $GITHUB_ENV
+
         CURRENT_VERSION=$(jq -r '.version' package.json)
         if [[ "${{ inputs.version_increment }}" == "custom" && -n "${{ inputs.custom_version }}" ]]; then
           NEW_VERSION="${{ inputs.custom_version }}"
         else
-          NEW_VERSION=$(npx semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+          # Use semver with the appropriate package manager
+          case $PACKAGE_MANAGER in
+            "pnpm")
+              NEW_VERSION=$(pnpm exec semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+              ;;
+            "yarn")
+              NEW_VERSION=$(yarn exec semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+              ;;
+            "npm"|*)
+              NEW_VERSION=$(npx semver $CURRENT_VERSION -i ${{ inputs.version_increment }})
+              ;;
+          esac
         fi
         echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
 
         git checkout -b version-bump-$NEW_VERSION
 
+        # Update package.json
         jq ".version=\"$NEW_VERSION\"" package.json > temp.json && mv temp.json package.json
-        jq ".version=\"$NEW_VERSION\"" package-lock.json > temp-lock.json && mv temp-lock.json package-lock.json
+        
+        # Update lock file if it exists
+        if [ -f "$LOCK_FILE" ]; then
+          case $PACKAGE_MANAGER in
+            "npm")
+              jq ".version=\"$NEW_VERSION\"" package-lock.json > temp-lock.json && mv temp-lock.json package-lock.json
+              ;;
+            "pnpm")
+              # For pnpm, we need to update the lock file differently as it's YAML
+              # We'll regenerate it by running pnpm install
+              pnpm install --lockfile-only
+              ;;
+            "yarn")
+              # For yarn, we need to update the lock file by running yarn install
+              yarn install --mode update-lockfile
+              ;;
+          esac
+        fi
       shell: bash
 
     - name: Commit Changes
       run: |
-        git add package.json package-lock.json
-        git commit -m "Bump version to ${{ env.new_version }}"
+        # Add package.json and the detected lock file if it exists
+        git add package.json
+        if [ -f "${{ env.lock_file }}" ]; then
+          git add "${{ env.lock_file }}"
+        fi
+        git commit -m "Bump version to ${{ env.new_version }} (using ${{ env.package_manager }})"
       shell: bash
 
     - name: Push Changes
@@ -72,14 +126,21 @@ runs:
 
     - name: Create Pull Request
       run: |
+        # Create appropriate PR body based on detected package manager
+        if [ -f "${{ env.lock_file }}" ]; then
+          LOCK_FILE_TEXT="and \`${{ env.lock_file }}\`"
+        else
+          LOCK_FILE_TEXT=""
+        fi
+        
         PR_RESPONSE=$(curl -X POST \
           -H "Authorization: Bearer ${{ inputs.github_token }}" \
           -H "Accept: application/vnd.github+json" \
           https://api.github.com/repos/${{ github.repository }}/pulls \
           -d @- <<EOF
         {
-          "title": "Bump version to ${{ env.new_version }}",
-          "body": "This PR updates the version to ${{ env.new_version }} in \`package.json\` and \`package-lock.json\`.",
+          "title": "Bump version to ${{ env.new_version }} (using ${{ env.package_manager }})",
+          "body": "This PR updates the version to ${{ env.new_version }} in \`package.json\` ${LOCK_FILE_TEXT} using ${{ env.package_manager }} package manager.",
           "head": "version-bump-${{ env.new_version }}",
           "base": "${{ inputs.main_branche }}"
         }
